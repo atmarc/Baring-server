@@ -12,12 +12,7 @@
     "bcryptjs": "*",
     "body-parser": "*",
     "express": "*",
-    "express-session": "*",
-    "express-validator": "*",
     "mongodb": "*",
-    "mongoose": "*",
-    "passport": "*",
-    "passport-http": "*",
-    "passport-local": "*"
+    "mongoose": "*"
   }
 }

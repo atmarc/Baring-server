@@ -1,16 +1,11 @@
 var express = require('express');
 var path = require('path');
 var bodyParser = require('body-parser');
-var expressValidator = require('express-validator');
-var session = require('express-session');
-var passport = require('passport');
-var LocalStrategy = require('passport-local').Strategy;
 var mongo = require('mongodb');
 var mongoose = require('mongoose');
 var bcrypt = require('bcryptjs');
 
-mongoose.connect('mongodb://localhost/loginapp', { useNewUrlParser: true });
-var db = mongoose.connection;
+
 //Arreglar warnings del mongoose
 mongoose.set('useNewUrlParser', true);
 mongoose.set('useFindAndModify', false);
@@ -19,87 +14,90 @@ mongoose.set('useCreateIndex', true);
 // Init App
 var app = express();
 
-// Express Session
-app.use(session({
-    secret: 'secret',
-    saveUninitialized: true,
-    resave: true
-}));
-
-// Passport init
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Express Validator
-app.use(expressValidator({
-  errorFormatter: function(param, msg, value) {
-      var namespace = param.split('.')
-      , root    = namespace.shift()
-      , formParam = root;
-
-    while(namespace.length) {
-      formParam += '[' + namespace.shift() + ']';
-    }
-    return {
-      param : formParam,
-      msg   : msg,
-      value : value
-    };
-  }
-}));
+var MongoClient = require('mongodb').MongoClient;
+var url = "mongodb://localhost:loginapp/";
 
 
+app.post('/proves', function (req,res) {
 
-// BodyParser Middleware
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
-
-
-// User Schema
-var UserSchema = mongoose.Schema({
-    username: {
-        type: String,
-        index:true
-    },
-    password: {
-        type: String
-    },
-    name: {
-        type: String
-    }
+    
 });
 
-var User = mongoose.model('User', UserSchema);
-
-// Funcio que encripta el password
-User.createUser = function (newUser, callback) {
-    bcrypt.genSalt(10, function(err, salt) {
-	    bcrypt.hash(newUser.password, salt, function(err, hash) {
-	        newUser.password = hash;
-	        newUser.save(callback);
-	    });
-	});
-};
-
+function comparePassword (candidatePassword, hash, callback){
+	bcrypt.compare(candidatePassword, hash, function(err, isMatch) {
+    	if(err) throw err;
+    	callback(null, isMatch);
+    });
+}
+//Register
 app.post('/register', function (req, res) {
     var username = req.query.username;
     var name = req.query.name;
     var password = req.query.password;
-    //Si s'han entrat els tres parametres, guardem l'usuari
-    if (name && password && username) {
-        var newUser = new User({
-            username: username,
-            name: name,
-            password: password
-        });
-        User.createUser(newUser, function (err, user) {
+    // Encriptem la contrasenya
+    bcrypt.genSalt(10, function(err, salt) {
+        bcrypt.hash(password, salt, function(err, hash) {
             if (err) throw err;
-            console.log(user);
+            password = hash;
+            //Si s'han entrat els tres parametres, guardem l'usuari
+            if (name && password && username) {
+                //afegim l'usuari a la BD
+                MongoClient.connect(url, { useNewUrlParser: true }, function(err, db) {
+                    if (err) throw err;
+                    var dbo = db.db("loginapp");
+                    var User = { name: name, username: username, password: password };
+                    dbo.collection("users").insertOne(User, function(err, res2) {
+                    if (err) throw err;
+                    console.log("User " + name + " has been added");
+                    res.send("User " + name + " has been added");
+                    db.close();
+                    });
+                });
+            }
         });
-    }   
+    });   
 });
 
 
+function usuariRegistrat (id) {
+    User.findById({_id: id}, function (err, resultat) {
+        return resultat[0];
+    });
+}
+
+app.post('/users', function(req, res) {
+    MongoClient.connect(url, { useNewUrlParser: true }, function(err, db) {
+        if (err) throw err;
+        var dbo = db.db("loginapp");
+        dbo.collection("users").find({}).toArray(function(err, resultat) {
+        if (err) throw err;
+        res.send(resultat);
+        db.close();
+        });
+    });
+});
+
+app.post('/deluser', function (req, res) {
+    MongoClient.connect(url, { useNewUrlParser: true }, function(err, db) {
+        if (err) throw err;
+        var dbo = db.db("loginapp");
+        dbo.collection("users").deleteOne({name: req.query.name}, function(err, resultat) {
+        if (err) throw err;
+        res.send("User " + req.query.name + " has been deleted");
+        db.close();
+        });
+    });
+});
+
+app.post('/hies', function(req, res) {
+    var userId = req.query.id;
+    var usuari = usuariRegistrat(userId);
+    if (!userId) res.send('No ha passat Id');
+    if (!usuari) res.send('No hi és');
+    else if (usuari && userId) {
+        res.send(usuari);
+    }
+});
 
 // Set Port
 app.set('port', (process.env.PORT || 3000));
